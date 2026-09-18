@@ -121,7 +121,7 @@ export function QuoteForm({ preselected }: { preselected?: string }) {
       ) : (
         <form ref={formRef} onSubmit={submit} noValidate>
           <p className="form-intro">
-            Four quick details and we'll call you back. Fields marked <span className="required-mark">*</span> are required.
+            Four quick details and we&rsquo;ll call you back. Fields marked <span className="required-mark">*</span> are required.
           </p>
 
           {/* Honeypot: off-screen, not tabbable, not announced. */}

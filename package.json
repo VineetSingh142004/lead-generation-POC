@@ -2,6 +2,7 @@
   "name": "epoxy-atelier-lead-generation",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@10.34.5",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

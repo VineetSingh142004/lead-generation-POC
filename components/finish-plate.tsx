@@ -44,8 +44,8 @@ const PALETTES = {
 
 export function FinishPlate({ service, priority = false }: { service: Service; priority?: boolean }) {
   if (service.photo) {
-    // eslint-disable-next-line @next/next/no-img-element -- fill-style decorative plate, sized by CSS
     return (
+      // eslint-disable-next-line @next/next/no-img-element -- decorative plate sized by CSS; next/image adds no value for a full-bleed background
       <img
         className="finish-plate"
         src={service.photo}
