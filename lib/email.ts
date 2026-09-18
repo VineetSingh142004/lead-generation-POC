@@ -1,4 +1,4 @@
-import { site } from "@/config/site";
+
 
 /**
  * Lead notification email.
@@ -22,6 +22,9 @@ type Lead = {
   service: string;
   email: string | null;
 };
+
+/** Passed in by the caller so the emails carry whatever name the operator has set. */
+type Branding = { businessName: string; successBody: string };
 
 const ENDPOINT = "https://api.resend.com/emails";
 
@@ -47,7 +50,7 @@ function escapeHtml(value: string) {
  * for a lead that is already safely in the database. Returns what actually happened
  * so the route can log it.
  */
-export async function notifyLead(lead: Lead): Promise<{ company: boolean; customer: boolean; skipped?: string }> {
+export async function notifyLead(lead: Lead, branding: Branding): Promise<{ company: boolean; customer: boolean; skipped?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.LEAD_FROM_EMAIL;
   const to = process.env.LEAD_NOTIFY_EMAIL;
@@ -88,7 +91,7 @@ export async function notifyLead(lead: Lead): Promise<{ company: boolean; custom
           `<p style="margin:0 0 6px;color:#a8a29e;font:600 13px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase">New quote request</p>` +
           `<h1 style="margin:0 0 24px;color:#1c1917;font:700 26px system-ui,sans-serif">${escapeHtml(lead.name)}</h1>` +
           `<table style="border-collapse:collapse">${table}</table>` +
-          `<p style="margin:28px 0 0;color:#57534e;font:400 15px system-ui,sans-serif">Submitted via ${escapeHtml(site.businessName)}.</p>` +
+          `<p style="margin:28px 0 0;color:#57534e;font:400 15px system-ui,sans-serif">Submitted via ${escapeHtml(branding.businessName)}.</p>` +
           `</div>`,
       },
       apiKey,
@@ -105,14 +108,14 @@ export async function notifyLead(lead: Lead): Promise<{ company: boolean; custom
         {
           from,
           to: [lead.email],
-          subject: `We've received your request — ${site.businessName}`,
+          subject: `We've received your request — ${branding.businessName}`,
           html:
             `<div style="max-width:560px;margin:0 auto;padding:32px 24px">` +
             `<h1 style="margin:0 0 14px;color:#1c1917;font:700 26px system-ui,sans-serif">Thank you, ${escapeHtml(lead.name.split(" ")[0])}.</h1>` +
-            `<p style="margin:0 0 24px;color:#44403c;font:400 17px/1.6 system-ui,sans-serif">${escapeHtml(site.quote.successBody)}</p>` +
+            `<p style="margin:0 0 24px;color:#44403c;font:400 17px/1.6 system-ui,sans-serif">${escapeHtml(branding.successBody)}</p>` +
             `<table style="border-collapse:collapse">${table}</table>` +
             `<p style="margin:28px 0 0;color:#57534e;font:400 15px/1.6 system-ui,sans-serif">If any of this is wrong, just reply to this email and we'll correct it.</p>` +
-            `<p style="margin:18px 0 0;color:#a8a29e;font:400 14px system-ui,sans-serif">${escapeHtml(site.businessName)}</p>` +
+            `<p style="margin:18px 0 0;color:#a8a29e;font:400 14px system-ui,sans-serif">${escapeHtml(branding.businessName)}</p>` +
             `</div>`,
         },
         apiKey,

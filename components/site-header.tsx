@@ -1,77 +1,77 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { site } from "@/config/site";
 
 const LINKS = [
   { href: "#services", label: "Services" },
-  { href: "#work", label: "Our work" },
-  { href: "#about", label: "About" },
+  { href: "#work", label: "Work" },
+  { href: "#approach", label: "Approach" },
 ];
 
 /**
- * Sticky header with a working mobile menu.
- *
- * Audit finding #12: below 760px the nav links were simply `display:none` with no
- * replacement, so mobile visitors — the majority for this category — lost navigation
- * entirely. Sticky also serves meeting 3: "as they scroll... a place where, if you're
- * interested, [you can] fill the form" — Get a quote is now always one tap away.
+ * Sticky header with a real mobile menu. The previous build hid the nav links below
+ * 760px with no replacement, which left phone visitors — most of this audience — with
+ * no navigation at all.
  */
-export function SiteHeader() {
+export function SiteHeader({ wordmark, phone }: { wordmark: [string, string]; phone: string }) {
   const [open, setOpen] = useState(false);
+  const [condensed, setCondensed] = useState(false);
 
-  // Close on Escape, and never leave the menu open across a resize to desktop.
   useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    function onResize() {
-      if (window.innerWidth > 760) setOpen(false);
-    }
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onResize = () => window.innerWidth > 860 && setOpen(false);
+    const onScroll = () => setCondensed(window.scrollY > 24);
+    onScroll();
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll);
     };
   }, []);
 
+  // Stop the page scrolling behind an open menu.
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
   return (
-    <header className="site-header">
+    <header className={`site-header${condensed ? " is-condensed" : ""}`}>
       <nav className="nav shell" aria-label="Primary">
         <a className="brand" href="#top">
-          {site.wordmark[0]} <span>{site.wordmark[1]}</span>
+          {wordmark[0]}&nbsp;<span>{wordmark[1]}</span>
         </a>
 
         <div className="nav-links">
-          {LINKS.map((link) => (
-            <a key={link.href} href={link.href}>{link.label}</a>
-          ))}
+          {LINKS.map((l) => <a key={l.href} href={l.href}>{l.label}</a>)}
         </div>
 
         <div className="nav-actions">
-          <a className="nav-cta" href="#quote">Get a quote <span aria-hidden="true">↗</span></a>
+          <a className="nav-phone" href={`tel:${phone.replace(/[^+\d]/g, "")}`}>{phone}</a>
+          <a className="nav-cta" href="#quote">Get a quote</a>
           <button
             className="nav-toggle"
             type="button"
             aria-expanded={open}
             aria-controls="mobile-menu"
             aria-label={open ? "Close menu" : "Open menu"}
-            onClick={() => setOpen((value) => !value)}
+            onClick={() => setOpen((v) => !v)}
           >
-            <span aria-hidden="true">{open ? "✕" : "☰"}</span>
+            <span className={`bars${open ? " is-open" : ""}`} aria-hidden="true"><i /><i /></span>
           </button>
         </div>
       </nav>
 
       <div id="mobile-menu" className="mobile-menu" hidden={!open}>
         <div className="shell">
-          {LINKS.map((link) => (
-            <a key={link.href} href={link.href} onClick={() => setOpen(false)}>{link.label}</a>
+          {LINKS.map((l) => (
+            <a key={l.href} href={l.href} onClick={() => setOpen(false)}>{l.label}</a>
           ))}
-          <a className="mobile-menu-cta" href="#quote" onClick={() => setOpen(false)}>
-            Get a free quote <span aria-hidden="true">↗</span>
-          </a>
+          <a href={`tel:${phone.replace(/[^+\d]/g, "")}`} onClick={() => setOpen(false)}>{phone}</a>
+          <a className="mobile-menu-cta" href="#quote" onClick={() => setOpen(false)}>Get a free quote</a>
         </div>
       </div>
     </header>

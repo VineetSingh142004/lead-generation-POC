@@ -27,6 +27,9 @@ export const TIERS = {
   burst: 40,
   /** Requests that passed validation and are about to be written. */
   submit: 5,
+  /** Admin sign-in attempts. Password guessing is the only real attack on a single
+   *  shared password, so this is the primary defence for /admin. */
+  login: 8,
 } as const;
 
 const buckets = new Map<string, Window>();

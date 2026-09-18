@@ -1,18 +1,27 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { services, site } from "@/config/site";
 import { validateLead, type FieldErrors } from "@/lib/leads";
+import type { SiteContent } from "@/lib/content";
 
 /**
- * The only interactive part of the page, isolated as a client island so the rest of
- * the landing page can stay a server component (audit finding #9).
+ * The quote form — the only genuinely interactive part of the page, isolated as a client
+ * island so everything around it stays a server component.
  *
- * Reads the preselected service from the ?service= query the service cards link to,
- * which keeps card -> form selection working without lifting state into a client page.
+ * Requirements PDF §4: four required fields (name, phone, address, service). Email is a
+ * fifth, optional field; it exists only so the customer can be sent their own copy of the
+ * confirmation, per the manager's "Send Reply to both Company and Customer".
  */
-export function QuoteForm({ preselected }: { preselected?: string }) {
-  const [service, setService] = useState(preselected ?? "");
+export function QuoteForm({
+  services,
+  copy,
+  businessName,
+}: {
+  services: { id: string; name: string }[];
+  copy: SiteContent["quote"];
+  businessName: string;
+}) {
+  const [service, setService] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [formError, setFormError] = useState("");
@@ -20,21 +29,16 @@ export function QuoteForm({ preselected }: { preselected?: string }) {
   const formRef = useRef<HTMLFormElement>(null);
   const successRef = useRef<HTMLDivElement>(null);
 
-  // Keep the select in sync when a service card is clicked after first render.
   useEffect(() => {
     function onPick(event: Event) {
-      const picked = (event as CustomEvent<string>).detail;
-      setService(picked);
-      setFieldErrors((current) => ({ ...current, service: undefined }));
+      setService((event as CustomEvent<string>).detail);
+      setFieldErrors((c) => { const n = { ...c }; delete n.service; return n; });
     }
     window.addEventListener("service:selected", onPick);
     return () => window.removeEventListener("service:selected", onPick);
   }, []);
 
-  // Move focus to the confirmation so keyboard and screen reader users are told it worked.
-  useEffect(() => {
-    if (sent) successRef.current?.focus();
-  }, [sent]);
+  useEffect(() => { if (sent) successRef.current?.focus(); }, [sent]);
 
   function clearFieldError(field: keyof FieldErrors) {
     setFieldErrors((current) => {
@@ -47,14 +51,12 @@ export function QuoteForm({ preselected }: { preselected?: string }) {
 
   function focusFirstError(errors: FieldErrors) {
     const first = Object.keys(errors)[0];
-    if (!first) return;
-    formRef.current?.querySelector<HTMLElement>(`[name="${first}"]`)?.focus();
+    if (first) formRef.current?.querySelector<HTMLElement>(`[name="${first}"]`)?.focus();
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError("");
-
     const form = new FormData(event.currentTarget);
     const payload = {
       name: String(form.get("name") ?? ""),
@@ -63,12 +65,10 @@ export function QuoteForm({ preselected }: { preselected?: string }) {
       email: String(form.get("email") ?? ""),
       service: String(form.get("service") ?? ""),
       consent: form.get("consent") === "on",
-      // Honeypot — hidden from real users, irresistible to bots.
-      company: String(form.get("company") ?? ""),
+      company: String(form.get("company") ?? ""), // honeypot
     };
 
-    // Same validator the server runs, for instant inline feedback.
-    const { errors } = validateLead(payload);
+    const { errors } = validateLead(payload, services.map((s) => s.name));
     if (Object.keys(errors).length) {
       setFieldErrors(errors);
       focusFirstError(errors);
@@ -84,14 +84,12 @@ export function QuoteForm({ preselected }: { preselected?: string }) {
         body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => ({}));
-
       if (!response.ok) {
-        // Audit finding #13: surface what the server actually said instead of one generic string.
         if (data.fieldErrors) {
           setFieldErrors(data.fieldErrors);
           focusFirstError(data.fieldErrors);
         }
-        setFormError(data.error ?? "We couldn't send your request just now. Please try again in a moment.");
+        setFormError(data.error ?? "We couldn't send that just now. Please try again in a moment.");
         return;
       }
       setSent(true);
@@ -104,138 +102,87 @@ export function QuoteForm({ preselected }: { preselected?: string }) {
 
   return (
     <div className="quote-form-slot">
-      {/*
-        Live region is rendered unconditionally and filled later. A region created at the
-        same moment as its content is frequently not announced (audit, a11y note).
-      */}
-      <div className="sr-only" role="status" aria-live="polite">
-        {sent ? site.quote.successBody : ""}
-      </div>
+      {/* Rendered unconditionally: a live region created at the same moment as its
+          content is frequently never announced. */}
+      <div className="sr-only" role="status" aria-live="polite">{sent ? copy.successBody : ""}</div>
 
       {sent ? (
         <div className="success" ref={successRef} tabIndex={-1}>
           <div className="success-mark" aria-hidden="true">✓</div>
-          <h3>{site.quote.successHeading}</h3>
-          <p>{site.quote.successBody}</p>
+          <h3>{copy.successHeading}</h3>
+          <p>{copy.successBody}</p>
         </div>
       ) : (
         <form ref={formRef} onSubmit={submit} noValidate>
-          <p className="form-intro">
-            Four quick details and we&rsquo;ll call you back. Fields marked <span className="required-mark">*</span> are required.
-          </p>
-
-          {/* Honeypot: off-screen, not tabbable, not announced. */}
           <div className="hp" aria-hidden="true">
             <label htmlFor="company">Company (leave blank)</label>
             <input id="company" name="company" type="text" tabIndex={-1} autoComplete="off" />
           </div>
 
-          <label>
-            <span className="label-text">Full name <span className="required-mark" aria-hidden="true">*</span></span>
-            <input
-              required
-              name="name"
-              placeholder="Your name"
-              autoComplete="name"
-              maxLength={120}
-              aria-invalid={Boolean(fieldErrors.name)}
-              aria-describedby={fieldErrors.name ? "name-error" : undefined}
-              onChange={() => clearFieldError("name")}
-            />
-            {fieldErrors.name && <span className="field-error" id="name-error" role="alert">{fieldErrors.name}</span>}
-          </label>
+          <div className="field-row">
+            <label>
+              <span className="label-text">Your name <span className="required-mark" aria-hidden="true">*</span></span>
+              <input required name="name" placeholder="Jordan Ellis" autoComplete="name" maxLength={120}
+                aria-invalid={Boolean(fieldErrors.name)}
+                aria-describedby={fieldErrors.name ? "name-error" : undefined}
+                onChange={() => clearFieldError("name")} />
+              {fieldErrors.name && <span className="field-error" id="name-error" role="alert">{fieldErrors.name}</span>}
+            </label>
+
+            <label>
+              <span className="label-text">Phone <span className="required-mark" aria-hidden="true">*</span></span>
+              <input required name="phone" inputMode="tel" autoComplete="tel" placeholder="(312) 555 0143" maxLength={24}
+                aria-invalid={Boolean(fieldErrors.phone)}
+                aria-describedby={fieldErrors.phone ? "phone-error" : undefined}
+                onChange={() => clearFieldError("phone")} />
+              {fieldErrors.phone && <span className="field-error" id="phone-error" role="alert">{fieldErrors.phone}</span>}
+            </label>
+          </div>
 
           <label>
-            <span className="label-text">Phone number <span className="required-mark" aria-hidden="true">*</span></span>
-            <input
-              required
-              name="phone"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="(000) 000-0000"
-              maxLength={24}
-              aria-invalid={Boolean(fieldErrors.phone)}
-              aria-describedby={fieldErrors.phone ? "phone-error" : undefined}
-              onChange={() => clearFieldError("phone")}
-            />
-            {fieldErrors.phone && <span className="field-error" id="phone-error" role="alert">{fieldErrors.phone}</span>}
-          </label>
-
-          <label>
-            <span className="label-text">Address / region <span className="required-mark" aria-hidden="true">*</span></span>
-            <input
-              required
-              name="address"
-              autoComplete="street-address"
-              placeholder="City or service area"
-              maxLength={200}
+            <span className="label-text">Address or area <span className="required-mark" aria-hidden="true">*</span></span>
+            <input required name="address" autoComplete="street-address" placeholder="Oak Park, IL" maxLength={200}
               aria-invalid={Boolean(fieldErrors.address)}
               aria-describedby={fieldErrors.address ? "address-error" : undefined}
-              onChange={() => clearFieldError("address")}
-            />
+              onChange={() => clearFieldError("address")} />
             {fieldErrors.address && <span className="field-error" id="address-error" role="alert">{fieldErrors.address}</span>}
           </label>
 
           <label>
-            <span className="label-text">Selected service <span className="required-mark" aria-hidden="true">*</span></span>
-            <select
-              required
-              name="service"
-              value={service}
+            <span className="label-text">What do you need? <span className="required-mark" aria-hidden="true">*</span></span>
+            <select required name="service" value={service}
               aria-invalid={Boolean(fieldErrors.service)}
               aria-describedby={fieldErrors.service ? "service-error" : undefined}
-              onChange={(event) => {
-                setService(event.target.value);
-                clearFieldError("service");
-              }}
-            >
+              onChange={(e) => { setService(e.target.value); clearFieldError("service"); }}>
               <option value="" disabled>Choose a service</option>
-              {services.map(({ name }) => <option key={name}>{name}</option>)}
+              {services.map(({ id, name }) => <option key={id}>{name}</option>)}
             </select>
             {fieldErrors.service && <span className="field-error" id="service-error" role="alert">{fieldErrors.service}</span>}
           </label>
 
-          {/*
-            Optional, and the reason the customer confirmation email is possible at all
-            (manager, slide 4: "Send Reply to both Company and Customer"). Kept optional so
-            the required set stays at the four fields the requirements PDF specifies.
-          */}
           <label>
-            <span className="label-text">Email <span className="optional-mark">optional — for your confirmation copy</span></span>
-            <input
-              name="email"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              maxLength={254}
+            <span className="label-text">Email <span className="optional-mark">optional — we&rsquo;ll send you a copy</span></span>
+            <input name="email" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com" maxLength={254}
               aria-invalid={Boolean(fieldErrors.email)}
               aria-describedby={fieldErrors.email ? "email-error" : undefined}
-              onChange={() => clearFieldError("email")}
-            />
+              onChange={() => clearFieldError("email")} />
             {fieldErrors.email && <span className="field-error" id="email-error" role="alert">{fieldErrors.email}</span>}
           </label>
 
           <label className="consent">
-            <input
-              type="checkbox"
-              name="consent"
+            <input type="checkbox" name="consent"
               aria-invalid={Boolean(fieldErrors.consent)}
               aria-describedby={fieldErrors.consent ? "consent-error" : undefined}
-              onChange={() => clearFieldError("consent")}
-            />
-            <span>
-              Yes, {site.businessName} may contact me about this request by phone or
-              email.<span className="required-mark" aria-hidden="true">{"\u00a0*"}</span>
-            </span>
+              onChange={() => clearFieldError("consent")} />
+            <span>{businessName} can contact me about this request by phone or email.<span className="required-mark" aria-hidden="true">{" *"}</span></span>
             {fieldErrors.consent && <span className="field-error" id="consent-error" role="alert">{fieldErrors.consent}</span>}
           </label>
 
           {formError && <p className="form-error" role="alert">{formError}</p>}
 
           <button className="submit" disabled={sending} aria-busy={sending}>
-            {sending ? "Sending your request…" : "Request a free quote"}
-            <span aria-hidden="true">↗</span>
+            <span>{sending ? "Sending…" : "Request my quote"}</span>
+            <span className="submit-arrow" aria-hidden="true">→</span>
           </button>
         </form>
       )}

@@ -19,6 +19,58 @@
 
 ---
 
+## Rebuild — 2026-09-17 (second pass)
+
+The site was rebuilt from scratch as a premium marketing site with real photography, a 3D
+hero and an authenticated `/admin` CMS. Findings from the audit above remain fixed; the
+notes below record what changed structurally and what the rebuild surfaced.
+
+### New structure
+
+| Area | Change |
+| --- | --- |
+| Content | `config/site.ts` replaced by `lib/content.ts` + `lib/content-store.ts`. All copy, services and photos are database-backed and editable, with defaults as fallback. |
+| Admin | New `/admin`: HMAC-signed session cookie, constant-time password check, per-IP login rate limit, atomic whole-document saves, image upload to Supabase Storage. |
+| Photography | 10 CC0 photos in `/public/photos`, each visually verified, labels derived from source titles. Provenance published at `/credits`. |
+| 3D | `components/hero-canvas.tsx` — react-three-fiber, dynamically imported, loop suspended off-screen, static frame under reduced-motion, procedural environment map so the CSP stays strict. |
+| Removed | `components/finish-plate.tsx` and `config/site.ts`, both superseded. |
+
+### Bug found and fixed during this pass
+
+**Service validation was pinned to a stale constant.** `lib/leads.ts` still imported
+`serviceNames` from the deleted `config/site.ts`, so once services became editable the API
+rejected *every* submission with "Choose the service that best fits your project" —
+including the exact values its own form offered. Caught by driving the real form in a
+browser, not by the build, which was green throughout.
+
+Fixed by injecting the allowed services into `validateLead()`: the route reads them from
+the live content, the form passes its own. Renaming a service in `/admin` can no longer
+break lead capture. Verified: the current name reaches storage, the old name is rejected.
+
+### Verified
+
+Clean `next build` (ESLint runs in-build), clean `tsc --noEmit`, clean `eslint .`.
+Browser-driven over CDP at 1440x900 and 390x844:
+
+- 3D hero renders under WebGL; three.js stays out of the initial bundle (113 kB First Load)
+- mobile menu opens with all links; sticky quote bar appears past the hero
+- service card preselects the form; invalid phone shows an inline error and moves focus
+- success confirmation renders, live region announces, focus moves to it
+- API: stale service name 400, no-digit phone 400, missing consent 400, honeypot 200,
+  cross-origin 403, oversized 413
+- admin: unauthenticated GET/PUT/upload all 401, `/admin` redirects, tampered session
+  cookie 401, empty-services and missing-alt-text saves rejected
+
+### Not verified
+
+- **Database round-trip.** No Supabase credentials exist locally, so saving content,
+  uploading an image and writing a lead were exercised only up to the point the database
+  is called. The API contract and failure paths are tested; persistence is not.
+- **Email delivery.** No `RESEND_API_KEY` locally.
+- No automated test suite. All verification above was manual.
+
+---
+
 ## Status — remediation pass, 2026-09-17
 
 All 14 numbered findings are resolved, alongside the manager's review feedback from

@@ -1,27 +1,29 @@
 import type { Metadata } from "next";
-import { DM_Mono, Manrope, Playfair_Display } from "next/font/google";
-import { site } from "@/config/site";
+import { DM_Mono, Instrument_Serif, Manrope } from "next/font/google";
+import { getContent } from "@/lib/content-store";
 import "./globals.css";
 
 /**
- * Self-hosted via next/font (audit finding #11). The stylesheet previously pulled three
- * families with an @import, which blocks rendering and is serialised behind the CSS —
- * the worst-case path for LCP on a page whose whole job is conversion.
+ * Fonts are self-hosted through next/font — no render-blocking @import, no third-party
+ * connection, and the strict CSP in next.config.ts stays intact.
  */
 const manrope = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-sans", display: "swap" });
-const playfair = Playfair_Display({ subsets: ["latin"], weight: ["500", "600"], style: ["normal", "italic"], variable: "--font-serif", display: "swap" });
-const dmMono = DM_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono", display: "swap" });
+const serif = Instrument_Serif({ subsets: ["latin"], weight: ["400"], style: ["normal", "italic"], variable: "--font-serif", display: "swap" });
+const mono = DM_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono", display: "swap" });
 
-export const metadata: Metadata = {
-  title: site.metaTitle,
-  description: site.metaDescription,
-  openGraph: { title: site.metaTitle, description: site.metaDescription, type: "website" },
-  robots: { index: true, follow: true },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const content = await getContent();
+  return {
+    title: content.metaTitle,
+    description: content.metaDescription,
+    openGraph: { title: content.metaTitle, description: content.metaDescription, type: "website" },
+    robots: { index: true, follow: true },
+  };
+}
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${manrope.variable} ${playfair.variable} ${dmMono.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${serif.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

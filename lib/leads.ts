@@ -1,8 +1,10 @@
-import { serviceNames } from "@/config/site";
-
 /**
- * Shared lead validation. Imported by BOTH the client form and the API route so the
- * two can never drift (audit: the service list previously lived in three places).
+ * Shared lead validation, run by BOTH the client form and the API route so the two can
+ * never drift.
+ *
+ * The allowed service names are passed in rather than imported: services are editable
+ * from /admin, so a hardcoded list here would reject every lead the moment an operator
+ * renamed a service.
  */
 
 export const LIMITS = { name: 120, phone: 24, address: 200, email: 254 } as const;
@@ -44,7 +46,10 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
  * Validates and normalizes a lead. Returns trimmed, length-capped values on success.
  * Runs identically in the browser (for inline errors) and on the server (as the real gate).
  */
-export function validateLead(raw: Partial<Record<keyof LeadInput, unknown>>): {
+export function validateLead(
+  raw: Partial<Record<keyof LeadInput, unknown>>,
+  allowedServices: string[],
+): {
   errors: FieldErrors;
   lead: Required<Pick<LeadInput, "name" | "phone" | "address" | "service">> & { email: string | null };
 } {
@@ -62,7 +67,7 @@ export function validateLead(raw: Partial<Record<keyof LeadInput, unknown>>): {
   else if (!isValidPhone(phone)) errors.phone = "Enter a valid phone number, including area code.";
   if (!address) errors.address = "Enter your city, region, or service address.";
   if (email && !EMAIL.test(email)) errors.email = "Enter a valid email address, or leave this blank.";
-  if (!serviceNames.includes(service)) errors.service = "Choose the service that best fits your project.";
+  if (!allowedServices.includes(service)) errors.service = "Choose the service that best fits your project.";
   if (raw.consent !== true) errors.consent = "Please confirm we can contact you about your request.";
 
   return { errors, lead: { name, phone, address, service, email: email || null } };

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { validateLead } from "@/lib/leads";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { notifyLead } from "@/lib/email";
+import { getContent } from "@/lib/content-store";
 
 /** Reject bodies larger than this outright — nothing legitimate comes close. */
 const MAX_BODY_BYTES = 4096;
@@ -71,8 +72,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  // Services are operator-editable, so the allowed values come from the live content
+  // rather than a constant — otherwise renaming a service in /admin would start
+  // rejecting every lead for it.
+  const content = await getContent();
+  const allowedServices = content.services.map((s) => s.name);
+
   // Same validator the browser runs, re-run here as the real gate.
-  const { errors, lead } = validateLead(body);
+  const { errors, lead } = validateLead(body, allowedServices);
   if (Object.keys(errors).length) {
     return NextResponse.json(
       { error: "Please complete each field with valid information.", fieldErrors: errors },
@@ -118,7 +125,10 @@ export async function POST(request: Request) {
   console.info("[leads] captured", { service: lead.service, hasEmail: Boolean(lead.email) });
 
   // The lead is safe. Email is a notification, not a gate — failures are logged, not surfaced.
-  const delivery = await notifyLead(lead);
+  const delivery = await notifyLead(lead, {
+    businessName: content.businessName,
+    successBody: content.quote.successBody,
+  });
   if (delivery.skipped) console.warn("[leads] notifications skipped:", delivery.skipped);
   else console.info("[leads] notifications", delivery);
 
